@@ -109,6 +109,23 @@ class Boids:
 
         return vel
 
+    def button_press(self, event):
+        """event handler for matplotlib button presses"""
+        # left click - add a boid
+        if event.button is 1:
+            self.pos = np.concatenate((self.pos,
+                                       np.array([[event.xdata, event.ydata]])),
+                                      axis=0)
+            # random velocity
+            angles = 2*math.pi*np.random.rand(1)
+            v = np.array(list(zip(np.sin(angles), np.cos(angles))))
+            self.vel = np.concatenate((self.vel, v), axis=0)
+            self.N += 1
+        # right click - scatter
+        elif event.button is 3:
+            # add scattering velocity
+            self.vel += 0.1*(self.pos - np.array([[event.xdata, event.ydata]]))
+
 
 def tick(frame_num, pts, beak, boids):
     #print frame_num
@@ -134,6 +151,8 @@ def main():
     fig = plt.figure()
     ax = plt.axes(xlim=(0, width), ylim=(0, height))
 
+    # add a "button press" event handler
+    cid = fig.canvas.mpl_connect('button_press_event', boids.button_press)
 
     # ax.plot() returns a tuple with one element like:
     # ([x1, x2, x3, x4], [y1, y2, y3, y4]),
