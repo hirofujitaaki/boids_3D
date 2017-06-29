@@ -11,9 +11,6 @@ MIN_DIST = 25.0
 MAX_RULE_VEL = 0.03
 MAX_VEL = 2.0
 
-b_num = 100
-p_num = 1
-
 
 class Boids:
     """Class that represents Boids simulation"""
@@ -21,15 +18,11 @@ class Boids:
         """ initialize the Boid simulation"""
         self.pos = [WIDTH/2.0, HEIGHT/2.0] + 10*np.random.rand(2*b_num).reshape(b_num, 2)
         # array([[ 324.45589932,  241.17939184],
-        #        [ 322.87078634,  248.77799187],
-        #        [ 324.33537195,  242.2450071 ],
         #        [ 327.11461049,  245.12112812]])  #e.g.
 
         angles = 2*math.pi*np.random.rand(b_num)
         self.vel = np.array(list(zip(np.cos(angles), np.sin(angles))))
         # array([[ 0.19352404, -0.98109553],
-        #        [ 0.85258769, -0.52258419],
-        #        [ 0.55343486,  0.83289246],
         #        [-0.95993835,  0.28021128]])  #e.g.
 
         # number of boids
@@ -46,8 +39,6 @@ class Boids:
         # get pairwise distances
         self.dist_matrix = squareform(pdist(self.pos))
         # array([[ 0.        ,  7.76217144,  1.07240977,  4.75457989],
-        #        [ 7.76217144,  0.        ,  6.6951401 ,  5.60202605],
-        #        [ 1.07240977,  6.6951401 ,  0.        ,  3.99952985],
         #        [ 4.75457989,  5.60202605,  3.99952985,  0.        ]])  #e.g
 
         # apply rules:
@@ -113,11 +104,9 @@ class Predators():
     def __init__(self, p_num=1):
         """ initialize the Boid simulation"""
 
-        self.pos = [WIDTH/2.0, HEIGHT/2.0] + np.random.uniform(-200, 200, 2)
-            # array([[ 324.45589932,  241.17939184],
-            #        [ 322.87078634,  248.77799187],
-            #        [ 324.33537195,  242.2450071 ],
-            #        [ 327.11461049,  245.12112812]])  #e.g.
+        self.pos = [WIDTH/2.0, HEIGHT/2.0] + np.random.uniform(-200, 200, 2).reshape(p_num, 2)
+        # should return like: array([[ 324.45589932,  241.17939184]])
+        # without .reshape(): array([ 322.87078634,  248.77799187])
 
         angles = 2*math.pi*np.random.rand(p_num)
         self.vel = np.array(list(zip(np.cos(angles), np.sin(angles))))
@@ -141,8 +130,6 @@ class Predators():
         # get pairwise distances
         # self.distmatrix = squareform(pdist(self.pos))
         # array([[ 0.        ,  7.76217144,  1.07240977,  4.75457989],
-        #        [ 7.76217144,  0.        ,  6.6951401 ,  5.60202605],
-        #        [ 1.07240977,  6.6951401 ,  0.        ,  3.99952985],
         #        [ 4.75457989,  5.60202605,  3.99952985,  0.        ]])  #e.g
 
         # apply rules:
@@ -212,7 +199,7 @@ class Predators():
             angles = 2*math.pi*np.random.rand(1)
             v = np.array(list(zip(np.sin(angles), np.cos(angles))))
             self.vel = np.concatenate((self.vel, v), axis=0)
-            self.b_num += 1
+            self.p_num += 1
 
 
 def tick(frame_num, pts, beak, boids, p_body, predators):
@@ -225,7 +212,10 @@ def tick(frame_num, pts, beak, boids, p_body, predators):
 def main():
     print('starting boids...')
 
+
+    b_num = 100
     boids = Boids(b_num)
+    p_num = 1
     predators = Predators(p_num)
 
     # setup plot
