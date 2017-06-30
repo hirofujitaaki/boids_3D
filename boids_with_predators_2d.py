@@ -2,7 +2,7 @@ import math
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-from scipy.spatial.distance import squareform, pdist
+from scipy.spatial.distance import squareform, pdist, cdist
 from numpy.linalg import norm
 
 WIDTH, HEIGHT = 640, 480
@@ -10,6 +10,7 @@ WIDTH, HEIGHT = 640, 480
 MIN_DIST = 25.0
 MAX_RULE_VEL = 0.03
 MAX_VEL = 2.0
+PREDATOR_RADIUS = 75.0
 
 
 class Boids:
@@ -34,15 +35,20 @@ class Boids:
         # max maginitude of final velocity
         self.max_vel = MAX_VEL
 
-    def tick(self, frame_num, pts, beak):
+    def tick(self, frame_num, pts, beak, predators):
         """Update the simulation by one time step."""
         # get pairwise distances
-        self.dist_matrix = squareform(pdist(self.pos))
+        self.b2b_dist_matrix = squareform(pdist(self.pos))
         # array([[ 0.        ,  7.76217144,  1.07240977,  4.75457989],
         #        [ 4.75457989,  5.60202605,  3.99952985,  0.        ]])  #e.g
 
+        self.b2p_dist_matrix = cdist(self.pos, predators.pos)
+        # returns like: array([[ 165.66129049,   86.37653115],
+        #                      [ 123.7833912 ,   44.10185375],
+        #                      [ 191.70244957,   60.83571559]]) if 3 boids and 2 predators
+
         # apply rules:
-        self.vel += self.apply_rules()
+        self.vel += self.apply_rules(predators)
         self.limit(self.vel, self.max_vel)
         self.pos += self.vel
         self.apply_bc()
@@ -77,24 +83,48 @@ class Boids:
             if coord[1] < - DELTA_R:
                 coord[1] = HEIGHT + DELTA_R
 
-    def apply_rules(self):
+    def apply_rules(self, predators):
         # apply rule #1 - Separation
-        D = self.dist_matrix < 25.0
+        D = self.b2b_dist_matrix < 25.0
         vel = self.pos*D.sum(axis=1).reshape(self.b_num, 1) - D.dot(self.pos)
         self.limit(vel, self.max_rule_vel)
 
         # different distance threshold
-        D = self.dist_matrix < 50.0
+        D = self.b2b_dist_matrix < 50.0
 
         # apply rule #2 - Alignment
         vel2 = D.dot(self.vel)
         self.limit(vel2, self.max_rule_vel)
         vel += vel2
 
-        # apply rule #1 - Cohesion
+        # apply rule #3 - Cohesion
         vel3 = D.dot(self.pos) - self.pos
         self.limit(vel3, self.max_rule_vel)
         vel += vel3
+
+        # extra rule: avoid the predators
+        D = self.b2p_dist_matrix < PREDATOR_RADIUS
+
+        # calculates the pair-wise displacements and returns the value if within the radius
+        displacements = np.empty((0,2), int)  # has to be (0, n) NOT (1, n)
+        for i in range(self.b_num):
+            for j in range(predators.p_num):
+                if D[i][j]:
+                    vel_tmp = (self.pos[i] - predators.pos[j]).reshape(1,2)
+                else:
+                    vel_tmp = np.zeros((1,2))
+                displacements = np.append(displacements, vel_tmp, axis=0)
+
+        # reshapes the array and adds up Xs and Ys for each boid
+        vel4 = np.empty((0,2), int)
+        displacements = displacements.reshape(self.b_num, predators.p_num*2)
+        for i in range(self.b_num):
+            vel_x = np.sum(displacements[i][::2])
+            vel_y = np.sum(displacements[i][1::2])
+            vel4 = np.append(vel4, np.array([[vel_x, vel_y]]), axis=0)
+
+        self.limit(displacements, self.max_rule_vel)
+        vel += vel4
 
         return vel
 
@@ -104,17 +134,12 @@ class Predators():
     def __init__(self, p_num=1):
         """ initialize the Boid simulation"""
 
-        self.pos = [WIDTH/2.0, HEIGHT/2.0] + np.random.uniform(-200, 200, 2).reshape(p_num, 2)
+        self.pos = [WIDTH/2.0, HEIGHT/2.0] + np.random.uniform(-200, 200, p_num*2).reshape(p_num, 2)
         # should return like: array([[ 324.45589932,  241.17939184]])
         # without .reshape(): array([ 322.87078634,  248.77799187])
 
         angles = 2*math.pi*np.random.rand(p_num)
         self.vel = np.array(list(zip(np.cos(angles), np.sin(angles))))
-        # array([[ 0.19352404, -0.98109553],
-        #        [ 0.85258769, -0.52258419],
-        #        [ 0.55343486,  0.83289246],
-        #        [-0.95993835,  0.28021128]])  #e.g.
-
 
         # number of boids
         self.p_num = p_num
@@ -170,12 +195,12 @@ class Predators():
 
     def apply_rules(self):
         # apply rule #1 - Separation
-        D = self.dist_matrix < 25.0
+        D = self.b2b_dist_matrix < 25.0
         vel = self.pos*D.sum(axis=1).reshape(self.b_num, 1) - D.dot(self.pos)
         self.limit(vel, self.max_rule_vel)
 
         # different distance threshold
-        D = self.dist_matrix < 50.0
+        D = self.b2b_dist_matrix < 50.0
 
         # apply rule #2 - Alignment
         vel2 = D.dot(self.vel)
@@ -204,7 +229,7 @@ class Predators():
 
 def tick(frame_num, pts, beak, boids, p_body, predators):
     """update function for animation"""
-    boids.tick(frame_num, pts, beak)
+    boids.tick(frame_num, pts, beak, predators)
     predators.tick(frame_num, p_body)
     return pts, beak, p_body
 
@@ -213,9 +238,9 @@ def main():
     print('starting boids...')
 
 
-    b_num = 100
-    boids = Boids(b_num)
+    b_num = 50
     p_num = 1
+    boids = Boids(b_num)
     predators = Predators(p_num)
 
     # setup plot
