@@ -5,59 +5,22 @@ import matplotlib.animation as animation
 from scipy.spatial.distance import squareform, pdist, cdist
 from numpy.linalg import norm
 
-WIDTH, HEIGHT = 640, 480
-
-MIN_DIST = 25.0
-MAX_RULE_VEL = 0.03
-MAX_VEL = 2.0
+WIDTH, HEIGHT   = 640, 480
+MIN_DIST        = 25.0
+MAX_RULE_VEL    = 0.03
+MAX_VEL         = 2.0
 PREDATOR_RADIUS = 75.0
 
 
-class Boids:
-    """Class that represents Boids simulation"""
-    def __init__(self, b_num):
-        """ initialize the Boid simulation"""
-        self.pos = [WIDTH/2.0, HEIGHT/2.0] + 10*np.random.rand(2*b_num).reshape(b_num, 2)
-        # array([[ 324.45589932,  241.17939184],
-        #        [ 327.11461049,  245.12112812]])  #e.g.
-
-        angles = 2*math.pi*np.random.rand(b_num)
-        self.vel = np.array(list(zip(np.cos(angles), np.sin(angles))))
-        # array([[ 0.19352404, -0.98109553],
-        #        [-0.95993835,  0.28021128]])  #e.g.
-
-        # number of boids
-        self.b_num = b_num
+class Birds():
+    def __init__(self, num):
+        self.num = num
         # min dist of approach
         self.min_dist = MIN_DIST
         # max magnitude of velocities calculated by "rules"
         self.max_rule_vel = MAX_RULE_VEL
         # max maginitude of final velocity
         self.max_vel = MAX_VEL
-
-    def tick(self, frame_num, pts, beak, predators):
-        """Update the simulation by one time step."""
-        # get pairwise distances
-        self.b2b_dist_matrix = squareform(pdist(self.pos))
-        # array([[ 0.        ,  7.76217144,  1.07240977,  4.75457989],
-        #        [ 4.75457989,  5.60202605,  3.99952985,  0.        ]])  #e.g
-
-        self.b2p_dist_matrix = cdist(self.pos, predators.pos)
-        # returns like: array([[ 165.66129049,   86.37653115],
-        #                      [ 123.7833912 ,   44.10185375],
-        #                      [ 191.70244957,   60.83571559]]) if 3 boids and 2 predators
-
-        # apply rules:
-        self.vel += self.apply_rules(predators)
-        self.limit(self.vel, self.max_vel)
-        self.pos += self.vel
-        self.apply_bc()
-        # update data
-        pts.set_data(self.pos.reshape(2*self.b_num)[::2],  # picks out odd-numbered elements
-                     self.pos.reshape(2*self.b_num)[1::2]) # picks out even-numbered elements
-        vec = self.pos + 10*self.vel/self.max_vel
-        beak.set_data(vec.reshape(2*self.b_num)[::2],
-                      vec.reshape(2*self.b_num)[1::2])
 
     def limit_vec(self, vec, max_val):
         """limit magnitide of 2D vector"""
@@ -83,10 +46,45 @@ class Boids:
             if coord[1] < - DELTA_R:
                 coord[1] = HEIGHT + DELTA_R
 
+
+class Boids(Birds):
+    """Class that represents Boids simulation"""
+
+    def __init__(self, num):
+        """ initialize the Boid simulation"""
+        super().__init__(num)
+        self.pos = [WIDTH/2.0, HEIGHT/2.0] + 10*np.random.rand(2*num).reshape(num, 2)
+        angles = 2*math.pi*np.random.rand(num)
+        self.vel = np.array(list(zip(np.cos(angles), np.sin(angles))))
+
+    def tick(self, frame_num, pts, beak, predators):
+        """Update the simulation by one time step."""
+        # get pairwise distances
+        self.b2b_dist_matrix = squareform(pdist(self.pos))
+        # array([[ 0.        ,  7.76217144,  1.07240977,  4.75457989],
+        #        [ 4.75457989,  5.60202605,  3.99952985,  0.        ]])  #e.g
+
+        self.b2p_dist_matrix = cdist(self.pos, predators.pos)
+        # returns like: array([[ 165.66129049,   86.37653115],
+        #                      [ 123.7833912 ,   44.10185375],
+        #                      [ 191.70244957,   60.83571559]]) if 3 boids and 2 predators
+
+        # apply rules:
+        self.vel += self.apply_rules(predators)
+        self.limit(self.vel, self.max_vel)
+        self.pos += self.vel
+        self.apply_bc()
+        # update data
+        pts.set_data(self.pos.reshape(2*self.num)[::2],  # picks out odd-numbered elements
+                     self.pos.reshape(2*self.num)[1::2]) # picks out even-numbered elements
+        vec = self.pos + 10*self.vel/self.max_vel
+        beak.set_data(vec.reshape(2*self.num)[::2],
+                      vec.reshape(2*self.num)[1::2])
+
     def apply_rules(self, predators):
         # apply rule #1 - Separation
         D = self.b2b_dist_matrix < 25.0
-        vel = self.pos*D.sum(axis=1).reshape(self.b_num, 1) - D.dot(self.pos)
+        vel = self.pos*D.sum(axis=1).reshape(self.num, 1) - D.dot(self.pos)
         self.limit(vel, self.max_rule_vel)
 
         # different distance threshold
@@ -107,8 +105,8 @@ class Boids:
 
         # calculates the pair-wise displacements and returns the value if within the radius
         displacements = np.empty((0,2), int)  # has to be (0, n) NOT (1, n)
-        for i in range(self.b_num):
-            for j in range(predators.p_num):
+        for i in range(self.num):
+            for j in range(predators.num):
                 if D[i][j]:
                     vel_tmp = (self.pos[i] - predators.pos[j]).reshape(1,2)
                 else:
@@ -117,8 +115,8 @@ class Boids:
 
         # reshapes the array and adds up Xs and Ys for each boid
         vel4 = np.empty((0,2), int)
-        displacements = displacements.reshape(self.b_num, predators.p_num*2)
-        for i in range(self.b_num):
+        displacements = displacements.reshape(self.num, predators.num*2)
+        for i in range(self.num):
             vel_x = np.sum(displacements[i][::2])
             vel_y = np.sum(displacements[i][1::2])
             vel4 = np.append(vel4, np.array([[vel_x, vel_y]]), axis=0)
@@ -129,26 +127,19 @@ class Boids:
         return vel
 
 
-class Predators():
+class Predators(Birds):
 
-    def __init__(self, p_num=1):
+    def __init__(self, num):
         """ initialize the Boid simulation"""
+        super().__init__(num)
 
-        self.pos = [WIDTH/2.0, HEIGHT/2.0] + np.random.uniform(-200, 200, p_num*2).reshape(p_num, 2)
+        self.pos = [WIDTH/2.0, HEIGHT/2.0] + np.random.uniform(-100, 100, num*2).reshape(num, 2)
         # should return like: array([[ 324.45589932,  241.17939184]])
         # without .reshape(): array([ 322.87078634,  248.77799187])
 
-        angles = 2*math.pi*np.random.rand(p_num)
+        angles = 2*math.pi*np.random.rand(num)
         self.vel = np.array(list(zip(np.cos(angles), np.sin(angles))))
 
-        # number of boids
-        self.p_num = p_num
-        # min dist of approach
-        self.min_dist = MIN_DIST
-        # max magnitude of velocities calculated by "rules"
-        self.max_rule_vel = MAX_RULE_VEL
-        # max maginitude of final velocity
-        self.max_vel = MAX_VEL
 
     def tick(self, frame_num, p_body):
         """update the simulation by one time step."""
@@ -163,40 +154,16 @@ class Predators():
         # self.pos += self.vel
         # self.apply_bc()
         # update data
-        p_body.set_data(self.pos.reshape(2*self.p_num)[::2],  # picks out odd-numbered elements
-                     self.pos.reshape(2*self.p_num)[1::2]) # picks out even-numbered elements
+        p_body.set_data(self.pos.reshape(2*self.num)[::2],  # picks out odd-numbered elements
+                     self.pos.reshape(2*self.num)[1::2]) # picks out even-numbered elements
         # vec = self.pos + 10*self.vel/self.maxvel
-        # beak.set_data(vec.reshape(2*self.b_num)[::2],
-        #               vec.reshape(2*self.b_num)[1::2])
-
-    def limit_vec(self, vec, max_val):
-        """limit magnitide of 2D vector"""
-        mag = norm(vec)
-        if mag > max_val:
-            vec[0], vec[1] = vec[0]*max_val/mag, vec[1]*max_val/mag
-
-    def limit(self, X, max_val):
-        """limit magnitide of 2D vectors in array X to max_value"""
-        for vec in X:
-            self.limit_vec(vec, max_val)
-
-    def apply_bc(self):
-        """apply boundary conditions"""
-        DELTA_R = 2.0
-        for coord in self.pos:
-            if coord[0] > WIDTH + DELTA_R:
-                coord[0] = - DELTA_R
-            if coord[0] < - DELTA_R:
-                coord[0] = WIDTH + DELTA_R
-            if coord[1] > HEIGHT + DELTA_R:
-                coord[1] = - DELTA_R
-            if coord[1] < - DELTA_R:
-                coord[1] = HEIGHT + DELTA_R
+        # beak.set_data(vec.reshape(2*self.num)[::2],
+        #               vec.reshape(2*self.num)[1::2])
 
     def apply_rules(self):
         # apply rule #1 - Separation
         D = self.b2b_dist_matrix < 25.0
-        vel = self.pos*D.sum(axis=1).reshape(self.b_num, 1) - D.dot(self.pos)
+        vel = self.pos*D.sum(axis=1).reshape(self.num, 1) - D.dot(self.pos)
         self.limit(vel, self.max_rule_vel)
 
         # different distance threshold
@@ -219,12 +186,12 @@ class Predators():
         # left click - add a boid
         if event.button is 1:
             self.pos = np.concatenate((self.pos,
-                          np.array([[event.xdata, event.ydata]])), axis=0)
+                                np.array([[event.xdata, event.ydata]])), axis=0)
             # random velocity
             angles = 2*math.pi*np.random.rand(1)
             v = np.array(list(zip(np.sin(angles), np.cos(angles))))
             self.vel = np.concatenate((self.vel, v), axis=0)
-            self.p_num += 1
+            self.num += 1
 
 
 def tick(frame_num, pts, beak, boids, p_body, predators):
@@ -237,11 +204,11 @@ def tick(frame_num, pts, beak, boids, p_body, predators):
 def main():
     print('starting boids...')
 
-
-    b_num = 50
-    p_num = 1
-    boids = Boids(b_num)
-    predators = Predators(p_num)
+    # create boids and predators objects
+    boids_num = 50
+    predators_num = 1
+    boids = Boids(boids_num)
+    predators = Predators(predators_num)
 
     # setup plot
     fig = plt.figure()
