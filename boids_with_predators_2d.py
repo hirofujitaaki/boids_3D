@@ -74,6 +74,7 @@ class Boids(Birds):
         self.limit(self.vel, self.max_vel)
         self.pos += self.vel
         self.apply_bc()
+
         # update data
         pts.set_data(self.pos.reshape(2*self.num)[::2],  # picks out odd-numbered elements
                      self.pos.reshape(2*self.num)[1::2]) # picks out even-numbered elements
@@ -113,7 +114,7 @@ class Boids(Birds):
                     vel_tmp = np.zeros((1,2))
                 displacements = np.append(displacements, vel_tmp, axis=0)
 
-        # reshapes the array and adds up Xs and Ys for each boid
+        # reshapes the array and adds up Xs and Ys per each boid
         vel4 = np.empty((0,2), int)
         displacements = displacements.reshape(self.num, predators.num*2)
         for i in range(self.num):
@@ -128,56 +129,60 @@ class Boids(Birds):
 
 
 class Predators(Birds):
+    """Class that represents Predators simulation"""
 
     def __init__(self, num):
         """ initialize the Boid simulation"""
         super().__init__(num)
 
-        self.pos = [WIDTH/2.0, HEIGHT/2.0] + np.random.uniform(-100, 100, num*2).reshape(num, 2)
+        self.pos = [WIDTH/2.0, HEIGHT/2.0] + np.random.uniform(-180, 180, num*2).reshape(num, 2)
         # should return like: array([[ 324.45589932,  241.17939184]])
         # without .reshape(): array([ 322.87078634,  248.77799187])
 
         angles = 2*math.pi*np.random.rand(num)
         self.vel = np.array(list(zip(np.cos(angles), np.sin(angles))))
 
-
-    def tick(self, frame_num, p_body):
+    def tick(self, frame_num, p_body, boids):
         """update the simulation by one time step."""
         # get pairwise distances
-        # self.distmatrix = squareform(pdist(self.pos))
-        # array([[ 0.        ,  7.76217144,  1.07240977,  4.75457989],
-        #        [ 4.75457989,  5.60202605,  3.99952985,  0.        ]])  #e.g
+        self.p2b_dist_matrix = cdist(self.pos, boids.pos)
 
         # apply rules:
-        # self.vel += self.apply_rules()
-        # self.limit(self.vel, self.maxvel)
-        # self.pos += self.vel
-        # self.apply_bc()
+        self.vel += self.apply_rules(boids)
+        self.limit(self.vel, self.max_vel)
+        self.pos += self.vel
+        self.apply_bc()
+
         # update data
         p_body.set_data(self.pos.reshape(2*self.num)[::2],  # picks out odd-numbered elements
                      self.pos.reshape(2*self.num)[1::2]) # picks out even-numbered elements
-        # vec = self.pos + 10*self.vel/self.maxvel
-        # beak.set_data(vec.reshape(2*self.num)[::2],
-        #               vec.reshape(2*self.num)[1::2])
 
-    def apply_rules(self):
-        # apply rule #1 - Separation
-        D = self.b2b_dist_matrix < 25.0
-        vel = self.pos*D.sum(axis=1).reshape(self.num, 1) - D.dot(self.pos)
-        self.limit(vel, self.max_rule_vel)
+    def apply_rules(self, boids):
 
-        # different distance threshold
-        D = self.b2b_dist_matrix < 50.0
+        # apply rule 1: chase the boids
+        D = self.p2b_dist_matrix < PREDATOR_RADIUS
 
-        # apply rule #2 - Alignment
-        vel2 = D.dot(self.vel)
-        self.limit(vel2, self.max_rule_vel)
-        vel += vel2
+        # calculates the predator-boids pairwise distances and returns the value
+        # if within the RADIUS
+        dist = np.empty((0,2), int)  # has to be (0, n) NOT (1, n)
+        for i in range(self.num):
+            for j in range(boids.num):
+                if D[i][j]:
+                    vel_tmp = (boids.pos[j] - self.pos[i]).reshape(1,2)
+                else:
+                    vel_tmp = np.zeros((1,2))
+                dist = np.append(dist, vel_tmp, axis=0)
 
-        # apply rule #1 - Cohesion
-        vel3 = D.dot(self.pos) - self.pos
-        self.limit(vel3, self.max_rule_vel)
-        vel += vel3
+        # reshapes the array and adds up Xs and Ys per each boid
+        vel = np.empty((0,2), int)
+        dist = dist.reshape(self.num, boids.num*2)
+        for i in range(self.num):
+            vel_x = np.sum(dist[i][::2])
+            vel_y = np.sum(dist[i][1::2])
+            vel = np.append(vel, np.array([[vel_x, vel_y]]), axis=0)
+
+        self.limit(dist, self.max_rule_vel)
+        # vel += vel4
 
         return vel
 
@@ -197,7 +202,7 @@ class Predators(Birds):
 def tick(frame_num, pts, beak, boids, p_body, predators):
     """update function for animation"""
     boids.tick(frame_num, pts, beak, predators)
-    predators.tick(frame_num, p_body)
+    predators.tick(frame_num, p_body, boids)
     return pts, beak, p_body
 
 
