@@ -9,8 +9,8 @@ WIDTH, HEIGHT         = 640, 480
 MIN_DIST              = 25.0
 MAX_RULE_VEL          = 0.03
 MAX_VEL               = 2.0
-
-PREDATOR_RADIUS       = 75.0
+BOID_RADIUS          = 75.0
+PREDATOR_RADIUS       = 100.0
 WEIGHT_AVOID_PREDATOR = 100
 
 
@@ -102,7 +102,7 @@ class Boids(Birds):
         vel += vel3
 
         # extra rule: avoid the predators
-        D = self.b2p_dist_matrix < PREDATOR_RADIUS
+        D = self.b2p_dist_matrix < BOID_RADIUS
 
         # calculates the boid-to-predators displacements and returns the value
         # if within the RADIUS
@@ -137,7 +137,7 @@ class Predators(Birds):
         """ initialize the Boid simulation"""
         super().__init__(num)
 
-        self.pos = [WIDTH/2.0, HEIGHT/2.0] + np.random.uniform(-80, 80, num*2).reshape(num, 2)
+        self.pos = [WIDTH/2.0, HEIGHT/2.0] + np.random.uniform(-180, 180, num*2).reshape(num, 2)
         # should return like: array([[ 324.45589932,  241.17939184]])
         # without .reshape(): array([ 322.87078634,  248.77799187])
 
