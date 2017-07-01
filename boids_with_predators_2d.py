@@ -5,11 +5,13 @@ import matplotlib.animation as animation
 from scipy.spatial.distance import squareform, pdist, cdist
 from numpy.linalg import norm
 
-WIDTH, HEIGHT   = 640, 480
-MIN_DIST        = 25.0
-MAX_RULE_VEL    = 0.03
-MAX_VEL         = 2.0
-PREDATOR_RADIUS = 75.0
+WIDTH, HEIGHT         = 640, 480
+MIN_DIST              = 25.0
+MAX_RULE_VEL          = 0.03
+MAX_VEL               = 2.0
+
+PREDATOR_RADIUS       = 75.0
+WEIGHT_AVOID_PREDATOR = 100
 
 
 class Birds():
@@ -61,8 +63,6 @@ class Boids(Birds):
         """Update the simulation by one time step."""
         # get pairwise distances
         self.b2b_dist_matrix = squareform(pdist(self.pos))
-        # array([[ 0.        ,  7.76217144,  1.07240977,  4.75457989],
-        #        [ 4.75457989,  5.60202605,  3.99952985,  0.        ]])  #e.g
 
         self.b2p_dist_matrix = cdist(self.pos, predators.pos)
         # returns like: array([[ 165.66129049,   86.37653115],
@@ -76,8 +76,8 @@ class Boids(Birds):
         self.apply_bc()
 
         # update data
-        pts.set_data(self.pos.reshape(2*self.num)[::2],  # picks out odd-numbered elements
-                     self.pos.reshape(2*self.num)[1::2]) # picks out even-numbered elements
+        pts.set_data(self.pos.reshape(2*self.num)[::2],
+                     self.pos.reshape(2*self.num)[1::2])
         vec = self.pos + 10*self.vel/self.max_vel
         beak.set_data(vec.reshape(2*self.num)[::2],
                       vec.reshape(2*self.num)[1::2])
@@ -104,25 +104,27 @@ class Boids(Birds):
         # extra rule: avoid the predators
         D = self.b2p_dist_matrix < PREDATOR_RADIUS
 
-        # calculates the pair-wise displacements and returns the value if within the radius
-        displacements = np.empty((0,2), int)  # has to be (0, n) NOT (1, n)
+        # calculates the boid-to-predators displacements and returns the value
+        # if within the RADIUS
+        dist = np.empty((0,2), int)  # has to be (0, n) NOT (1, n)
         for i in range(self.num):
             for j in range(predators.num):
                 if D[i][j]:
                     vel_tmp = (self.pos[i] - predators.pos[j]).reshape(1,2)
                 else:
                     vel_tmp = np.zeros((1,2))
-                displacements = np.append(displacements, vel_tmp, axis=0)
+                dist = np.append(dist, vel_tmp, axis=0)
 
         # reshapes the array and adds up Xs and Ys per each boid
         vel4 = np.empty((0,2), int)
-        displacements = displacements.reshape(self.num, predators.num*2)
+        dist = dist.reshape(self.num, predators.num*2)
         for i in range(self.num):
-            vel_x = np.sum(displacements[i][::2])
-            vel_y = np.sum(displacements[i][1::2])
+            vel_x = np.sum(dist[i][::2])
+            vel_y = np.sum(dist[i][1::2])
             vel4 = np.append(vel4, np.array([[vel_x, vel_y]]), axis=0)
 
-        self.limit(displacements, self.max_rule_vel)
+        self.limit(vel4, self.max_rule_vel)
+        vel4 = vel4*WEIGHT_AVOID_PREDATOR
         vel += vel4
 
         return vel
@@ -135,7 +137,7 @@ class Predators(Birds):
         """ initialize the Boid simulation"""
         super().__init__(num)
 
-        self.pos = [WIDTH/2.0, HEIGHT/2.0] + np.random.uniform(-180, 180, num*2).reshape(num, 2)
+        self.pos = [WIDTH/2.0, HEIGHT/2.0] + np.random.uniform(-80, 80, num*2).reshape(num, 2)
         # should return like: array([[ 324.45589932,  241.17939184]])
         # without .reshape(): array([ 322.87078634,  248.77799187])
 
@@ -154,15 +156,21 @@ class Predators(Birds):
         self.apply_bc()
 
         # update data
-        p_body.set_data(self.pos.reshape(2*self.num)[::2],  # picks out odd-numbered elements
-                     self.pos.reshape(2*self.num)[1::2]) # picks out even-numbered elements
+        p_body.set_data(self.pos.reshape(2*self.num)[::2],
+                     self.pos.reshape(2*self.num)[1::2])
 
     def apply_rules(self, boids):
 
-        # apply rule 1: chase the boids
+        # apply rule 1: Steer to move towards the center of mass
+        mass_center = np.sum(boids.pos, axis=0) / boids.num
+        vel = mass_center - self.pos
+        self.limit(vel, self.max_rule_vel)
+
+
+        # apply rule 2: Chase the boids with in the range
         D = self.p2b_dist_matrix < PREDATOR_RADIUS
 
-        # calculates the predator-boids pairwise distances and returns the value
+        # calculates the predator-to-boids displacements and returns the value
         # if within the RADIUS
         dist = np.empty((0,2), int)  # has to be (0, n) NOT (1, n)
         for i in range(self.num):
@@ -174,15 +182,16 @@ class Predators(Birds):
                 dist = np.append(dist, vel_tmp, axis=0)
 
         # reshapes the array and adds up Xs and Ys per each boid
-        vel = np.empty((0,2), int)
+        vel2 = np.empty((0,2), int)
         dist = dist.reshape(self.num, boids.num*2)
         for i in range(self.num):
             vel_x = np.sum(dist[i][::2])
             vel_y = np.sum(dist[i][1::2])
-            vel = np.append(vel, np.array([[vel_x, vel_y]]), axis=0)
+            vel2 = np.append(vel2, np.array([[vel_x, vel_y]]), axis=0)
 
-        self.limit(dist, self.max_rule_vel)
-        # vel += vel4
+        # import pdb; pdb.set_trace()
+        self.limit(vel2, self.max_rule_vel)
+        vel += vel2
 
         return vel
 
@@ -210,7 +219,7 @@ def main():
     print('starting boids...')
 
     # create boids and predators objects
-    boids_num = 50
+    boids_num = 11
     predators_num = 1
     boids = Boids(boids_num)
     predators = Predators(predators_num)
